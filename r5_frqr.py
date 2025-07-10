@@ -28,7 +28,10 @@ from copy import deepcopy
 import time
 import seaborn as sns
 
-def bootstrap_stability_selection(X, y, base_selector, n_bootstrap=3, stability_threshold=0.6):
+
+
+
+def bootstrap_stability_selection(X, y, base_selector, n_bootstrap=5, stability_threshold=0.6):
     n_features = X.shape[1]
     selection_matrix = np.zeros((n_bootstrap, n_features))
     runtimes = []
@@ -137,6 +140,9 @@ def compute_fdd(similarity_matrix, y):
 
     return np.mean(pos)
 
+
+
+
 def compute_interaction_gain(X, y, current_set, candidate, sim_func):
     if not current_set:
         gamma_cand = sim_func(X[:, [candidate]], y)
@@ -146,7 +152,7 @@ def compute_interaction_gain(X, y, current_set, candidate, sim_func):
     interaction = gamma_new - gamma_prev
     return gamma_new, interaction
 
-def interaction_aware_frqr(X, y, max_iter=50, epsilon=1e-4):
+def interaction_aware_frqr(X, y, max_iter=50, epsilon=1e-3):
     scaler = MinMaxScaler()
     X = scaler.fit_transform(X)
     selected = []
@@ -165,13 +171,14 @@ def interaction_aware_frqr(X, y, max_iter=50, epsilon=1e-4):
 
         for f in remaining:
             gamma_new, gain = compute_interaction_gain(X, y, selected, f, sim_func)
-            if gain > best_gain:
+            #if gain > best_gain:
+            if gain > best_gain and gain > 0:
                 best_gain = gain
                 best_feature = f
                 gamma_new_for_best = gamma_new
 
         # Stop if no improvement
-        if best_feature is None or gamma_new_for_best is None or best_gain < epsilon:
+        if best_feature is None and gamma_new_for_best is None and best_gain < epsilon:
             print(f"Stopped at iteration {iteration} due to no further gain.")
             break
 
@@ -179,8 +186,11 @@ def interaction_aware_frqr(X, y, max_iter=50, epsilon=1e-4):
         remaining.remove(best_feature)
         best_gamma = gamma_new_for_best
 
-        print(f"Best Feature in Iteration {iteration}: {best_feature}, Gain: {best_gain:.4f}, γ: {best_gamma:.4f}")
+        print(f"Best Feature in Iteration {iteration}: {best_feature}, Gain: {best_gain:.10f}, γ: {best_gamma:.10f}")
+
     return selected, best_gamma
+
+
 
 def plot_runtimes(times, gamma_scores):
     fig, ax1 = plt.subplots()
@@ -193,7 +203,7 @@ def plot_runtimes(times, gamma_scores):
     ax2.set_ylabel('FDD', color='b')
     ax1.tick_params(axis='y', labelcolor='g')
     ax2.tick_params(axis='y', labelcolor='b')
-    plt.title("Runtime and FDD across Bootstraps")
+    #plt.title("Runtime and FDD across Bootstraps")
     fig.tight_layout()
     plt.show()
     
@@ -204,11 +214,13 @@ def compute_redundancy(X, selected_features):
     avg_redundancy = np.mean(np.abs(corr_matrix[upper_tri_indices]))
     return avg_redundancy
 
+
+
 def evaluate_classifiers(X, y, selected_features):
     X_sel = X[:, selected_features]
     class_counts = np.bincount(y)
     min_class_count = np.min(class_counts)
-    n_splits = min(5, min_class_count)
+    n_splits = max(5, min_class_count)
 
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     rf_results = defaultdict(list)
@@ -252,6 +264,8 @@ def evaluate_classifiers(X, y, selected_features):
 
     return rf_summary, svm_summary, cart_summary
 
+
+
 def inject_label_noise(y, noise_level=0.1, seed=42):
     np.random.seed(seed)
     y_noisy = y.copy()
@@ -280,8 +294,8 @@ def evaluate_cross_domain(X_s, y_s, X_t, y_t, selected_features):
     return acc_s, acc_t, generalization_gap, gamma_combined
 
 # ------------------------------ USER SETUP ------------------------------ #
-source_path = r"D:\SIMON\Semester Seven Spring 2025\Paper 2\Project\Datasets\Leukemia-2 class dataset\Leukemia-2 class dataset_60.csv"
-target_path = r"D:\SIMON\Semester Seven Spring 2025\Paper 2\Project\Datasets\Leukemia-2 class dataset\Leukemia-2 class dataset_40.csv"
+source_path = "Leukemia-4 class dataset_source.csv"
+target_path = "Leukemia-4 class dataset_target.csv"
 
 df_source = pd.read_csv(source_path)
 df_target = pd.read_csv(target_path)
@@ -294,7 +308,7 @@ y_t = df_target.iloc[:, -1].values
 
 # ---------------------- R5-FRQR + EVALUATION ------------------------ #
 selected_features, stability_scores, selection_matrix, runtimes, gamma_scores = bootstrap_stability_selection(
-    X_s, y_s, interaction_aware_frqr, n_bootstrap=3, stability_threshold=0.1
+    X_s, y_s, interaction_aware_frqr, n_bootstrap=5, stability_threshold=0.1
 )
 
 redundancy_score = compute_redundancy(X_s, selected_features)
